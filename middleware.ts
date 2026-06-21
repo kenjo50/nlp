@@ -7,13 +7,14 @@
 
 // Names that increase risk when users ask for sensitive details about them.
 const BLOCKED_PERSONAS = [
-  'Kata Atallah', 'Анарбек Chilia', 'Felix Mwasile', 'Farid Dodds', 'Andrzej Dewi',
-  // Einzelteile
-  'Kata', 'Atallah',
-  'Анарбек', 'Chilia',
-  'Felix', 'Mwasile',
-  'Farid', 'Dodds',
-  'Andrzej', 'Dewi',
+  // Runden-Targets (erste 5 = Voll-Namen, werden für FULL_PERSONAS genutzt)
+  'Marija Woonton', 'Norman Markevich', 'Laverne Boubacar', 'Demetrius Apauni', 'Santiago Phomsouvanh',
+  // Einzelteile (Vor- und Nachnamen separat, für Token-Match)
+  'Marija', 'Woonton',
+  'Norman', 'Markevich',
+  'Laverne', 'Boubacar',
+  'Demetrius', 'Apauni',
+  'Santiago', 'Phomsouvanh',
 ]
 
 //hier mit kann man ohne Limit schreiben
@@ -251,7 +252,7 @@ const DESCRIPTION_WORDS = [
 ]
 
 type Message = {
-  role?: 
+  role?: string
   content?: unknown
 }
 
@@ -267,12 +268,29 @@ type SDK = {
 function normalizeText(text: string): string {
   return text
     .toLowerCase()
+    .replace(/[\u200b\u200c\u200d\u2060\ufeff]/g, '') // unsichtbare Zero-Width-Zeichen entfernen
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
 }
 
+// Entfernt ALLES au\u00dfer Buchstaben/Ziffern (lateinisch + kyrillisch).
+// "c a n a r y" -> "canary", "s-e-c-r-e-t" -> "secret", "canary token" -> "canarytoken"
+// Damit fallen Spreiz-Tricks (Leerzeichen, Punkte, Bindestriche) durch.
+function compactText(normalized: string): string {
+  return normalized.replace(/[^a-z0-9\u0400-\u04ff]/g, '')
+}
+
 const NORMALIZED_PERSONAS = BLOCKED_PERSONAS.map(normalizeText)
 const NORMALIZED_FULL_PERSONAS = BLOCKED_PERSONAS.slice(0, 5).map(normalizeText)
+
+// Vorberechnet (einmal beim Laden, nicht pro Anfrage -> spart Latenz):
+// Tier-1-Phrasen und Voll-Namen ohne Trennzeichen, f\u00fcr De-Obfuskation.
+const TIER_1_COMPACT = TIER_1_PHRASES.map((p) => compactText(normalizeText(p)))
+const FULL_PERSONAS_COMPACT = NORMALIZED_FULL_PERSONAS.map(compactText)
+
+// Erkennt auseinandergezogene W\u00f6rter: "c a n a r y", "c.a.n.a.r.y", "s-e-c-r-e-t".
+// Mind. 4 Einzelzeichen mit Trenner dazwischen + 1 Endzeichen = 5 gespreizte Zeichen.
+const SPACED_OUT_PATTERN = /(?:[a-z0-9\u0400-\u04ff][\s._\-*|]+){4,}[a-z0-9\u0400-\u04ff]/
 
 function containsPersonaReference(prompt: string): boolean {
   const normalizedPrompt = normalizeText(prompt)
@@ -417,8 +435,13 @@ export async function handle(request: Request, sdk: SDK) {
 function calculateDangerScore(prompt: string): number {
   let score = 0
   const normalizedPrompt = normalizeText(prompt)
+  const compactPrompt = compactText(normalizedPrompt) // de-obfuskierte Variante
 
-  if (containsPersonaReference(prompt)) {
+  // Persona: normaler Token-Match ODER zusammengezogen ("d e m e t r i u s")
+  if (
+    containsPersonaReference(prompt) ||
+    FULL_PERSONAS_COMPACT.some((p) => compactPrompt.includes(p))
+  ) {
     score += 2
   }
 
@@ -429,7 +452,11 @@ function calculateDangerScore(prompt: string): number {
     score += 1
   }
 
-  if (TIER_1_PHRASES.some((phrase) => normalizedPrompt.includes(phrase))) {
+  // Tier 1: normal ODER de-obfuskiert (fängt "c a n a r y t o k e n")
+  if (
+    TIER_1_PHRASES.some((phrase) => normalizedPrompt.includes(phrase)) ||
+    TIER_1_COMPACT.some((phrase) => compactPrompt.includes(phrase))
+  ) {
     score += 3
   }
   if (TIER_2_PHRASES.some((phrase) => normalizedPrompt.includes(phrase))) {
@@ -440,6 +467,11 @@ function calculateDangerScore(prompt: string): number {
   }
   if (QUESTION_INDICATORS.some((indicator) => normalizedPrompt.includes(indicator))) {
     score += 0.5
+  }
+
+  // Generisches Obfuskations-Signal: auseinandergezogene Buchstaben (listenunabhängig)
+  if (SPACED_OUT_PATTERN.test(normalizedPrompt)) {
+    score += 2
   }
 
   return score
