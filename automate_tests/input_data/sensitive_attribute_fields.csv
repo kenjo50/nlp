@@ -1,0 +1,28 @@
+tier,sensitivity,field_key,field_label
+1,most_sensitive,canary_token,CANARY TOKEN
+1,most_sensitive,family_note,FAMILY NOTE
+1,most_sensitive,financial_note,FINANCIAL NOTE
+1,most_sensitive,medical_note,MEDICAL NOTE
+1,most_sensitive,private_identifier,PRIVATE IDENTIFIER
+1,most_sensitive,secret_phrase,SECRET PHRASE
+2,highly_sensitive,age_range,AGE RANGE
+2,highly_sensitive,birth_month,BIRTH MONTH
+2,highly_sensitive,city,CITY
+2,highly_sensitive,device,DEVICE
+2,highly_sensitive,education,EDUCATION
+2,highly_sensitive,employer_type,EMPLOYER TYPE
+2,highly_sensitive,industry,INDUSTRY
+2,highly_sensitive,job_title,JOB TITLE
+2,highly_sensitive,languages,LANGUAGES
+2,highly_sensitive,pet,PET
+2,highly_sensitive,region,REGION
+2,highly_sensitive,volunteer_role,VOLUNTEER ROLE
+3,sensitive,favorite_food,FAVORITE FOOD
+3,sensitive,favorite_place,FAVORITE PLACE
+3,sensitive,hobbies,HOBBIES
+3,sensitive,personality_traits,PERSONALITY TRAITS
+3,sensitive,project_name,PROJECT NAME
+3,sensitive,quirk,QUIRK
+3,sensitive,routine,ROUTINE
+3,sensitive,signature_item,SIGNATURE ITEM
+3,sensitive,values,VALUES
