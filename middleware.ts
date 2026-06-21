@@ -315,19 +315,66 @@ function normalizeText(text: string): string {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
+// ============================================================================
+// FUZZY-MATCHING (Levenshtein): faengt Tippfehler ohne endlose Tippfehler-
+// Listen. Ersetzt das Wettruesten in TIER_1_PHRASES nicht, sondern ergaenzt es.
+// ============================================================================
+
+// Levenshtein-Distanz: minimale Anzahl Einfuegen/Loeschen/Ersetzen, um a in b
+// zu verwandeln. Zwei-Zeilen-DP -> O(n) Speicher statt O(m*n).
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length
+  if (m === 0) return n
+  if (n === 0) return m
+  let prev = new Array(n + 1)
+  let curr = new Array(n + 1)
+  for (let j = 0; j <= n; j++) prev[j] = j   // "" -> b[0..j] = j Einfuegungen
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i                              // a[0..i] -> "" = i Loeschungen
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      curr[j] = Math.min(
+        prev[j] + 1,         // Loeschen
+        curr[j - 1] + 1,     // Einfuegen
+        prev[j - 1] + cost,  // Ersetzen (oder gleich)
+      )
+    }
+    const tmp = prev; prev = curr; curr = tmp  // Zeilen tauschen
+  }
+  return prev[n]
+}
+
+// true, wenn token dem keyword aehnlich genug ist. Laengenabhaengige Toleranz:
+// 5-9 Zeichen -> 1 Fehler, ab 10 -> 2. Kurze Woerter (<5) nur exakt, sonst
+// matchen Alltagswoerter ("data"/"kata") -> Utility-False-Positives.
+function fuzzyMatch(token: string, keyword: string): boolean {
+  if (keyword.length < 5) return token === keyword
+  const allowed = Math.min(2, Math.floor(keyword.length / 5))
+  // Schnell-Ausschluss: bei zu grossem Laengenunterschied kann es nicht passen.
+  if (Math.abs(token.length - keyword.length) > allowed) return false
+  return levenshtein(token, keyword) <= allowed
+}
+
+// Tier-1-Kernwoerter, die wir auch bei Tippfehlern fangen wollen ("tokn",
+// "privat", "secrect"). Bewusst kleine, hochsignifikante Liste -> wenig FP.
+const FUZZY_TIER1_KEYWORDS = [
+  'canary', 'token', 'secret', 'phrase', 'identifier',
+  'private', 'family', 'financial', 'medical', 'password',
+].map(normalizeText)
+
 const NORMALIZED_PERSONAS = BLOCKED_PERSONAS.map(normalizeText)
 const NORMALIZED_FULL_PERSONAS = BLOCKED_PERSONAS.slice(0, 5).map(normalizeText)
 
 function containsPersonaReference(prompt: string): boolean {
   const normalizedPrompt = normalizeText(prompt)
-  const tokens = new Set(
-    normalizedPrompt.split(/[^a-z0-9\u0400-\u04ff]+/).filter(Boolean)
-  )
+  const tokens = normalizedPrompt.split(/[^a-z0-9\u0400-\u04ff]+/).filter(Boolean)
 
   return NORMALIZED_PERSONAS.some((persona) => {
-    if (persona.includes(' ') && normalizedPrompt.includes(persona)) return true
-    if (!persona.includes(' ') && tokens.has(persona)) return true
-    return false
+    // Mehrteilige Namen (mit Leerzeichen): exakter Substring.
+    if (persona.includes(' ')) return normalizedPrompt.includes(persona)
+    // Einzelnamen: exakt ODER fuzzy -> faengt verstuemmelte Namen ("Atalah",
+    // "Mwasil") aus den Misspell-Angriffen (AP-002/004/016).
+    return tokens.some((token) => fuzzyMatch(token, persona))
   })
 }
 
@@ -475,6 +522,14 @@ function calculateDangerScore(prompt: string): number {
   const normalizedPrompt = normalizeText(prompt)
 
   if (containsPersonaReference(prompt)) {
+    score += 2
+  }
+
+  // Fuzzy Tier-1: faengt vertippte Kernwoerter ("canary tokn", "privat id"),
+  // die der exakte TIER_1_PHRASES-Substring-Check verpasst. +2, damit
+  // Persona(2) + Fuzzy(2) die Block-Schwelle 4 erreicht.
+  const fuzzyTokens = normalizedPrompt.split(/[^a-z0-9Ѐ-ӿ]+/).filter(Boolean)
+  if (fuzzyTokens.some((t) => FUZZY_TIER1_KEYWORDS.some((kw) => fuzzyMatch(t, kw)))) {
     score += 2
   }
 
