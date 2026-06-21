@@ -7,13 +7,13 @@
 
 // Names that increase risk when users ask for sensitive details about them.
 const BLOCKED_PERSONAS = [
-  'Kata Atallah', 'Анарбек Chilia', 'Felix Mwasile', 'Farid Dodds', 'Andrzej Dewi',
+  'Marija Woonton', 'Norman Markevich', 'Laverne Boubacar', 'Demetrius Apauni', 'Santiago Phomsouvanh',
   // Einzelteile
-  'Kata', 'Atallah',
-  'Анарбек', 'Chilia',
-  'Felix', 'Mwasile',
-  'Farid', 'Dodds',
-  'Andrzej', 'Dewi',
+  'Marija', 'Woonton',
+  'Norman', 'Markevich',
+  'Laverne', 'Boubacar',
+  'Demetrius', 'Apauni',
+  'Santiago', 'Phomsouvanh',
 ]
 
 //hier mit kann man ohne Limit schreiben
